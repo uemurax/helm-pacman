@@ -4,7 +4,7 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-03-19 00:17:27 tuemura>
+;; Time-stamp: <2016-03-19 00:37:05 tuemura>
 ;;
 ;;; Code:
 
@@ -90,16 +90,26 @@
 (helm-pacman-defaction helm-pacman-query-list "Ql")
 (make-helm-action helm-pacman-query-run-list helm-pacman-query-list t)
 
+(helm-pacman-defaction helm-pacman-remove "R" t)
+(make-helm-action helm-pacman-run-remove helm-pacman-remove)
+
+(helm-pacman-defaction helm-pacman-upgrade "Syu" t)
+(make-helm-action helm-pacman-run-upgrade helm-pacman-upgrade)
+
 (defvar helm-pacman-query-actions
   (helm-make-actions
    "Show package(s)" 'helm-pacman-query-info
-   "List package(s)' files" 'helm-pacman-query-list))
+   "List package(s)' files" 'helm-pacman-query-list
+   "Upgrade package(s)" 'helm-pacman-upgrade
+   "Remove package(s)" 'helm-pacman-remove))
 
 (defvar helm-pacman-query-keymap
   (let ((m (make-sparse-keymap)))
     (set-keymap-parent m helm-map)
     (dolist (v '(("M-L" . helm-pacman-query-run-list)
-                 ("C-c l" . helm-pacman-query-run-list-persistent)))
+                 ("C-c l" . helm-pacman-query-run-list-persistent)
+                 ("M-U" . helm-pacman-run-upgrade)
+                 ("C-c r" . helm-pacman-run-remove)))
       (define-key m (kbd (car v)) (cdr v)))
     m))
 
