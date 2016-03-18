@@ -4,7 +4,7 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-03-19 00:44:24 tuemura>
+;; Time-stamp: <2016-03-19 01:26:24 tuemura>
 ;;
 ;;; Code:
 
@@ -47,9 +47,10 @@
 
 ;;;; Sync
 
-(defun helm-pacman-sync-candidates ()
-  (split-string (shell-command-to-string "pacman -Slq")
-                "\n"))
+(defun helm-pacman-sync-candidates-process ()
+  (apply #'start-process "pacman-sync" nil "pacman"
+         "-Ssq"
+         (split-string helm-pattern " ")))
 
 (helm-pacman-defaction helm-pacman-sync-info "Si")
 
@@ -74,8 +75,8 @@
     m))
 
 (defun helm-pacman-sync-build-source (name &rest args)
-  (helm-build-sync-source name
-    :candidates (helm-pacman-sync-candidates)
+  (helm-build-async-source name
+    :candidates-process 'helm-pacman-sync-candidates-process
     :action 'helm-pacman-sync-actions
     :keymap helm-pacman-sync-keymap))
 
@@ -87,9 +88,10 @@
 
 ;;;; Query
 
-(defun helm-pacman-query-candidates ()
-  (split-string (shell-command-to-string "pacman -Qq")
-                "\n"))
+(defun helm-pacman-query-candidates-process ()
+  (apply #'start-process "pacman-query" nil "pacman"
+                 "-Qsq"
+                 (split-string helm-pattern " ")))
 
 (helm-pacman-defaction helm-pacman-query-info "Qi")
 
@@ -120,8 +122,8 @@
     m))
 
 (defun helm-pacman-query-build-source (name &rest args)
-  (helm-build-sync-source name
-    :candidates (helm-pacman-query-candidates)
+  (helm-build-async-source name
+    :candidates-process 'helm-pacman-query-candidates-process
     :action 'helm-pacman-query-actions
     :keymap helm-pacman-query-keymap))
 
