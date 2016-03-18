@@ -4,7 +4,7 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-03-19 00:37:05 tuemura>
+;; Time-stamp: <2016-03-19 00:44:24 tuemura>
 ;;
 ;;; Code:
 
@@ -47,7 +47,7 @@
 
 ;;;; Sync
 
-(defun helm-pacman-sync ()
+(defun helm-pacman-sync-candidates ()
   (split-string (shell-command-to-string "pacman -Slq")
                 "\n"))
 
@@ -73,15 +73,21 @@
       (define-key m (kbd (car v)) (cdr v)))
     m))
 
-(defun helm-pacman-build-sync-source (name &rest args)
+(defun helm-pacman-sync-build-source (name &rest args)
   (helm-build-sync-source name
-    :candidates (helm-pacman-sync)
+    :candidates (helm-pacman-sync-candidates)
     :action 'helm-pacman-sync-actions
     :keymap helm-pacman-sync-keymap))
 
+;;;###autoload
+(defun helm-pacman-sync ()
+  (interactive)
+  (helm :sources (helm-pacman-sync-build-source "Sync")
+        :buffer "*helm-pacman-sync*"))
+
 ;;;; Query
 
-(defun helm-pacman-query ()
+(defun helm-pacman-query-candidates ()
   (split-string (shell-command-to-string "pacman -Qq")
                 "\n"))
 
@@ -113,11 +119,17 @@
       (define-key m (kbd (car v)) (cdr v)))
     m))
 
-(defun helm-pacman-build-query-source (name &rest args)
+(defun helm-pacman-query-build-source (name &rest args)
   (helm-build-sync-source name
-    :candidates (helm-pacman-query)
+    :candidates (helm-pacman-query-candidates)
     :action 'helm-pacman-query-actions
     :keymap helm-pacman-query-keymap))
+
+;;;###autoload
+(defun helm-pacman-query ()
+  (interactive)
+  (helm :sources (helm-pacman-query-build-source "Query")
+        :buffer "*helm-pacman-query*"))
 
 ;;;; Put together
 
@@ -125,8 +137,8 @@
 (defun helm-pacman ()
   "Helm for Pacman."
   (interactive)
-  (helm :sources (list (helm-pacman-build-sync-source "Sync")
-                       (helm-pacman-build-query-source "Query"))
+  (helm :sources (list (helm-pacman-sync-build-source "Sync")
+                       (helm-pacman-query-build-source "Query"))
         :buffer "*helm-pacman*"))
 
 (provide 'helm-pacman)
