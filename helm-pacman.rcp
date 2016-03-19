@@ -1,0 +1,5 @@
+(:name helm-pacman
+       :description "Helm interface for Pacman"
+       :type github
+       :pkgname "uemurax/helm-pacman"
+       :depends (helm))
