@@ -4,7 +4,7 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-03-19 01:26:24 tuemura>
+;; Time-stamp: <2016-03-19 16:49:20 tuemura>
 ;;
 ;;; Code:
 
@@ -86,6 +86,66 @@
   (helm :sources (helm-pacman-sync-build-source "Sync")
         :buffer "*helm-pacman-sync*"))
 
+;;;; Sync groups
+
+(defun helm-pacman-sync-group-candidates ()
+  (split-string (shell-command-to-string "pacman -Sg")
+                "\n"))
+
+(helm-pacman-defaction helm-pacman-sync-group-show "Sg")
+
+(defvar helm-pacman-sync-group-actions
+  (helm-make-actions
+   "Show group(s)" 'helm-pacman-sync-group-show
+   "Follow group(s)" 'helm-pacman-sync-group-follow
+   "Install group(s)" 'helm-pacman-sync-install
+   "Download group(s)" 'helm-pacman-sync-download))
+
+(defvar helm-pacman-sync-group-keymap
+  (let ((m (make-sparse-keymap)))
+    (set-keymap-parent m helm-map)
+    (dolist (v '(("C-c RET" . helm-pacman-sync-group-run-follow)
+                 ("C-c i" . helm-pacman-sync-run-install)
+                 ("C-c w" . helm-pacman-sync-run-download)))
+      (define-key m (kbd (car v)) (cdr v)))
+    m))
+
+(defun helm-pacman-sync-group-build-source (name &rest args)
+  (helm-build-sync-source name
+    :candidates 'helm-pacman-sync-group-candidates
+    :action 'helm-pacman-sync-group-actions
+    :keymap helm-pacman-sync-group-keymap))
+
+;;;###autoload
+(defun helm-pacman-sync-group ()
+  (interactive)
+  (helm :sources (helm-pacman-sync-group-build-source "Sync group")
+        :buffer "*helm-pacman-sync-group*"))
+
+;;;;; Follow group
+
+(defun helm-pacman-sync-group-follow-candidates (groups)
+  (split-string (shell-command-to-string (concat "pacman -Sg "
+                                                 (mapconcat #'identity groups " ")))
+                "\n"))
+
+(defun helm-pacman-sync-group-follow-display-to-real (candidate)
+  (cadr (split-string candidate " ")))
+
+(defun helm-pacman-sync-group-follow-build-source (name groups)
+  (helm-build-sync-source name
+    :candidates (helm-pacman-sync-group-follow-candidates groups)
+    :display-to-real 'helm-pacman-sync-group-follow-display-to-real
+    :action 'helm-pacman-sync-actions
+    :keymap helm-pacman-sync-keymap))
+
+(defun helm-pacman-sync-group-follow (_ignore)
+  (helm :sources (helm-pacman-sync-group-follow-build-source "Sync"
+                                                             (helm-marked-candidates))
+        :buffer "*helm-pacman-sync*"))
+
+(make-helm-action helm-pacman-sync-group-run-follow helm-pacman-sync-group-follow)
+
 ;;;; Query
 
 (defun helm-pacman-query-candidates-process ()
@@ -140,6 +200,7 @@
   "Helm for Pacman."
   (interactive)
   (helm :sources (list (helm-pacman-sync-build-source "Sync")
+                       (helm-pacman-sync-group-build-source "Sync - group")
                        (helm-pacman-query-build-source "Query"))
         :buffer "*helm-pacman*"))
 
