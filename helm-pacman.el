@@ -4,7 +4,7 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-03-19 22:20:52 tuemura>
+;; Time-stamp: <2016-03-19 23:00:47 tuemura>
 ;;
 ;;; Code:
 
@@ -226,7 +226,8 @@
 
 (defclass helm-pacman-aur-source (helm-source-in-buffer)
   ((candidates-cache :initform t)
-   (pattern-cache :initform "")))
+   (pattern-cache :initform "")
+   (count :initform 0)))
 
 (defun helm-pacman-aur-candidates-callback-error (source obj)
   (message (cdr (assq 'error obj)))
@@ -237,10 +238,8 @@
           (mapcar (lambda (x) (cons (cdr (assq 'Name x)) x))
                   (cdr (assq 'results obj)))))
 
-(defvar helm-pacman-aur-candidates-callback-count 0)
-
 (defun helm-pacman-aur-candidates-callback (status source count &rest _ignore)
-  (when (= count helm-pacman-aur-candidates-callback-count)
+  (when (= count (cdr (assq 'count source)))
     (goto-char (point-min))
     (search-forward "\n\n")
     (let* ((obj (json-read))
@@ -258,15 +257,15 @@
     (unless (equal (cdr (assq 'pattern-cache src)) helm-pattern)
       (setcdr (assq 'pattern-cache src) helm-pattern)
       (message "retrieving AUR packages...")
-      (setq helm-pacman-aur-candidates-callback-count
-            (1+ helm-pacman-aur-candidates-callback-count))
+      (setcdr (assq 'count src)
+              (1+ (cdr (assq 'count src))))
       (url-retrieve (concat (helm-pacman-aur-rpc-uri
                              `((type "search")))
                             "&arg="
                             (replace-regexp-in-string "\\s-+" "+" helm-pattern))
                     'helm-pacman-aur-candidates-callback
                     (list src
-                          helm-pacman-aur-candidates-callback-count)))
+                          (cdr (assq 'count src)))))
     (cdr (assq 'candidates-cache src))))
 
 (defun helm-pacman-aur-format-package (pkg)
@@ -300,14 +299,41 @@
                   (t (message "Wrong type: %S" type)
                      nil))))))
 
+(defun helm-pacman-aur-get-callback (status dir &rest _ignore)
+  (goto-char (point-min))
+  (search-forward "\n\n")
+  (shell-command-on-region (point) (point-max)
+                           (format "tar xz -C '%s'" dir)))
+
+(defun helm-pacman-aur-get (_ignore)
+  (dolist (v (helm-marked-candidates))
+    (let ((dir (expand-file-name (read-directory-name "Download into: " "~/.local/source/")))
+          (path (cdr (assq 'URLPath v))))
+      (unless (file-exists-p dir)
+        (make-directory dir t))
+      (url-retrieve (concat helm-pacman-aur-host
+                            path)
+                    'helm-pacman-aur-get-callback
+                    (list dir)))))
+(make-helm-action helm-pacman-aur-run-get helm-pacman-aur-get)
+
 (defvar helm-pacman-aur-actions
   (helm-make-actions
-   "Show package(s)" 'helm-pacman-aur-info))
+   "Show package(s)" 'helm-pacman-aur-info
+   "Get package(s) PKGBUILD" 'helm-pacman-aur-get))
+
+(defvar helm-pacman-aur-keymap
+  (let ((m (make-sparse-keymap)))
+    (set-keymap-parent m helm-map)
+    (dolist (v '(("C-c w" . helm-pacman-aur-run-get)))
+      (define-key m (kbd (car v)) (cdr v)))
+    m))
 
 (defun helm-pacman-aur-build-source (name &rest args)
   (helm-make-source name 'helm-pacman-aur-source
     :candidates 'helm-pacman-aur-candidates
     :action 'helm-pacman-aur-actions
+    :keymap helm-pacman-aur-keymap
     :delayed 0.2))
 
 ;;;###autoload
