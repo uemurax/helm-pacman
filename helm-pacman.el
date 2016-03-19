@@ -4,7 +4,7 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-03-19 22:09:38 tuemura>
+;; Time-stamp: <2016-03-19 22:20:52 tuemura>
 ;;
 ;;; Code:
 
@@ -289,8 +289,8 @@
         (with-current-buffer
             (url-retrieve-synchronously (helm-pacman-aur-rpc-uri
                                          `((type "info")
-                                           ,@(mapcar (lambda (x) (list "arg[]" (cdr (assq 'Name x))))
-                                                     (helm-marked-candidates)))))
+                                           ("arg[]" ,@(mapcar (lambda (x) (cdr (assq 'Name x)))
+                                                              (helm-marked-candidates))))))
           (goto-char (point-min))
           (search-forward "\n\n")
           (let* ((obj (json-read))
