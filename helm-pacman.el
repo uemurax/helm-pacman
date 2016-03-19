@@ -4,7 +4,7 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-03-19 16:49:20 tuemura>
+;; Time-stamp: <2016-03-19 17:02:38 tuemura>
 ;;
 ;;; Code:
 
@@ -119,7 +119,7 @@
 ;;;###autoload
 (defun helm-pacman-sync-group ()
   (interactive)
-  (helm :sources (helm-pacman-sync-group-build-source "Sync group")
+  (helm :sources (helm-pacman-sync-group-build-source "Sync - group")
         :buffer "*helm-pacman-sync-group*"))
 
 ;;;;; Follow group
@@ -129,13 +129,13 @@
                                                  (mapconcat #'identity groups " ")))
                 "\n"))
 
-(defun helm-pacman-sync-group-follow-display-to-real (candidate)
+(defun helm-pacman-group-display-to-real (candidate)
   (cadr (split-string candidate " ")))
 
 (defun helm-pacman-sync-group-follow-build-source (name groups)
   (helm-build-sync-source name
     :candidates (helm-pacman-sync-group-follow-candidates groups)
-    :display-to-real 'helm-pacman-sync-group-follow-display-to-real
+    :display-to-real 'helm-pacman-group-display-to-real
     :action 'helm-pacman-sync-actions
     :keymap helm-pacman-sync-keymap))
 
@@ -193,6 +193,25 @@
   (helm :sources (helm-pacman-query-build-source "Query")
         :buffer "*helm-pacman-query*"))
 
+;;;; Query groups
+
+(defun helm-pacman-query-group-candidates ()
+  (split-string (shell-command-to-string "pacman -Qg")
+                "\n"))
+
+(defun helm-pacman-query-group-build-source (name &rest args)
+  (helm-build-sync-source name
+    :candidates 'helm-pacman-query-group-candidates
+    :display-to-real 'helm-pacman-group-display-to-real
+    :action 'helm-pacman-query-actions
+    :keymap helm-pacman-query-keymap))
+
+;;;###autoload
+(defun helm-pacman-query-group ()
+  (interactive)
+  (helm :sources (helm-pacman-query-group-build-source "Query - group")
+        :buffer "*helm-pacman-query-group*"))
+
 ;;;; Put together
 
 ;;;###autoload
@@ -201,7 +220,8 @@
   (interactive)
   (helm :sources (list (helm-pacman-sync-build-source "Sync")
                        (helm-pacman-sync-group-build-source "Sync - group")
-                       (helm-pacman-query-build-source "Query"))
+                       (helm-pacman-query-build-source "Query")
+                       (helm-pacman-query-group-build-source "Query - group"))
         :buffer "*helm-pacman*"))
 
 (provide 'helm-pacman)
