@@ -4,7 +4,7 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-03-19 23:00:47 tuemura>
+;; Time-stamp: <2016-03-19 23:32:10 tuemura>
 ;;
 ;;; Code:
 
@@ -12,6 +12,9 @@
 
 (eval-when-compile
   (defmacro make-helm-action (action function &optional also-persistent)
+    "Define ACTION which runs FUNCTION in `helm-pacman' session.
+If ALSO-PERSISTENT is non-nil, define `ACTION-persistent'
+which runs FUNCTION in `helm-pacman' session without exitting session."
     (let ((action-doc (format "Run `%s' in `helm-pacman' session." function))
           (persistent (intern (format "%s-persistent" action)))
           (persistent-doc (format "Run `%s' in `helm-pacman' session without exitting session."
@@ -37,17 +40,22 @@
   (mapconcat 'identity (helm-marked-candidates) " "))
 
 (defmacro helm-pacman-defaction (name operation &optional sudo)
-  (let ((command (format "%spacman -%s "
-                         (if sudo "sudo " "")
-                         operation)))
+  "Define an action NAME which executes the command `pacman -OPERATION TARGETS...'.
+If SUDO is non-nil, it executes the command `sudo pacman -OPERATION TARGETS...'."
+  (let* ((command (format "%spacman -%s "
+                          (if sudo "sudo " "")
+                          operation))
+         (doc (format "Run `%sTARGETS...'." command)))
     `(progn
        (defun ,name (&rest _ignore)
+         ,doc
          (async-shell-command (concat ,command
                                       (helm-pacman-make-arguments)))))))
 
 ;;;; Sync
 
 (defun helm-pacman-sync-candidates-process ()
+  "Produce a list of packages."
   (apply #'start-process "pacman-sync" nil "pacman"
          "-Ssq"
          (split-string helm-pattern " ")))
@@ -64,7 +72,8 @@
   (helm-make-actions
    "Show package(s)" 'helm-pacman-sync-info
    "Install package(s)" 'helm-pacman-sync-install
-   "Download package(s)" 'helm-pacman-sync-download))
+   "Download package(s)" 'helm-pacman-sync-download)
+  "Actions for `helm-pacman-sync'.")
 
 (defvar helm-pacman-sync-keymap
   (let ((m (make-sparse-keymap)))
@@ -72,9 +81,11 @@
     (dolist (v '(("C-c RET" . helm-pacman-sync-run-install)
                  ("C-c w" . helm-pacman-sync-run-download)))
       (define-key m (kbd (car v)) (cdr v)))
-    m))
+    m)
+  "Keymap for `helm-pacman-sync'.")
 
 (defun helm-pacman-sync-build-source (name &rest args)
+  "Build source for `helm-pacman-sync'."
   (helm-build-async-source name
     :candidates-process 'helm-pacman-sync-candidates-process
     :action 'helm-pacman-sync-actions
@@ -82,6 +93,7 @@
 
 ;;;###autoload
 (defun helm-pacman-sync ()
+  "Helm for `pacman -S'."
   (interactive)
   (helm :sources (helm-pacman-sync-build-source "Sync")
         :buffer "*helm-pacman-sync*"))
@@ -89,6 +101,7 @@
 ;;;; Sync groups
 
 (defun helm-pacman-sync-group-candidates ()
+  "Produce a list of groups."
   (split-string (shell-command-to-string "pacman -Sg")
                 "\n"))
 
@@ -99,7 +112,8 @@
    "Show group(s)" 'helm-pacman-sync-group-show
    "Follow group(s)" 'helm-pacman-sync-group-follow
    "Install group(s)" 'helm-pacman-sync-install
-   "Download group(s)" 'helm-pacman-sync-download))
+   "Download group(s)" 'helm-pacman-sync-download)
+  "Actions for `helm-pacman-sync-group'.")
 
 (defvar helm-pacman-sync-group-keymap
   (let ((m (make-sparse-keymap)))
@@ -108,9 +122,11 @@
                  ("C-c i" . helm-pacman-sync-run-install)
                  ("C-c w" . helm-pacman-sync-run-download)))
       (define-key m (kbd (car v)) (cdr v)))
-    m))
+    m)
+  "Keymap for `helm-pacman-sync-group'.")
 
 (defun helm-pacman-sync-group-build-source (name &rest args)
+  "Build source for `helm-pacman-sync-group'."
   (helm-build-sync-source name
     :candidates 'helm-pacman-sync-group-candidates
     :action 'helm-pacman-sync-group-actions
@@ -118,6 +134,7 @@
 
 ;;;###autoload
 (defun helm-pacman-sync-group ()
+  "Helm for `pacman -Sg'."
   (interactive)
   (helm :sources (helm-pacman-sync-group-build-source "Sync - group")
         :buffer "*helm-pacman-sync-group*"))
@@ -125,14 +142,17 @@
 ;;;;; Follow group
 
 (defun helm-pacman-sync-group-follow-candidates (groups)
+  "Produce a list of packages in GROUPS."
   (split-string (shell-command-to-string (concat "pacman -Sg "
                                                  (mapconcat #'identity groups " ")))
                 "\n"))
 
 (defun helm-pacman-group-display-to-real (candidate)
+  "Convert a display form `GROUP PACKAGE' to a real form `PACKAGE'."
   (cadr (split-string candidate " ")))
 
 (defun helm-pacman-sync-group-follow-build-source (name groups)
+  "Build source for `helm-pacman-sync-group-follow'."
   (helm-build-sync-source name
     :candidates (helm-pacman-sync-group-follow-candidates groups)
     :display-to-real 'helm-pacman-group-display-to-real
@@ -140,6 +160,7 @@
     :keymap helm-pacman-sync-keymap))
 
 (defun helm-pacman-sync-group-follow (_ignore)
+  "Spawn a `helm-pacman-sync' session on the selected candidates."
   (helm :sources (helm-pacman-sync-group-follow-build-source "Sync"
                                                              (helm-marked-candidates))
         :buffer "*helm-pacman-sync*"))
@@ -149,6 +170,7 @@
 ;;;; Query
 
 (defun helm-pacman-query-candidates-process ()
+  "Produce a list of installed packages."
   (apply #'start-process "pacman-query" nil "pacman"
                  "-Qsq"
                  (split-string helm-pattern " ")))
@@ -169,7 +191,8 @@
    "Show package(s)" 'helm-pacman-query-info
    "List package(s)' files" 'helm-pacman-query-list
    "Upgrade package(s)" 'helm-pacman-upgrade
-   "Remove package(s)" 'helm-pacman-remove))
+   "Remove package(s)" 'helm-pacman-remove)
+  "Actions for `helm-pacman-query'.")
 
 (defvar helm-pacman-query-keymap
   (let ((m (make-sparse-keymap)))
@@ -179,9 +202,11 @@
                  ("M-U" . helm-pacman-run-upgrade)
                  ("C-c r" . helm-pacman-run-remove)))
       (define-key m (kbd (car v)) (cdr v)))
-    m))
+    m)
+  "Keymap for `helm-pacman-query'.")
 
 (defun helm-pacman-query-build-source (name &rest args)
+  "Build source for `helm-pacman-query'."
   (helm-build-async-source name
     :candidates-process 'helm-pacman-query-candidates-process
     :action 'helm-pacman-query-actions
@@ -189,6 +214,7 @@
 
 ;;;###autoload
 (defun helm-pacman-query ()
+  "Helm for `pacman -Q'."
   (interactive)
   (helm :sources (helm-pacman-query-build-source "Query")
         :buffer "*helm-pacman-query*"))
@@ -196,10 +222,12 @@
 ;;;; Query groups
 
 (defun helm-pacman-query-group-candidates ()
+  "Produce a list of installed groups."
   (split-string (shell-command-to-string "pacman -Qg")
                 "\n"))
 
 (defun helm-pacman-query-group-build-source (name &rest args)
+  "Build source for `helm-pacman-query-group'."
   (helm-build-sync-source name
     :candidates 'helm-pacman-query-group-candidates
     :display-to-real 'helm-pacman-group-display-to-real
@@ -208,6 +236,7 @@
 
 ;;;###autoload
 (defun helm-pacman-query-group ()
+  "Helm for `pacman -Qg'."
   (interactive)
   (helm :sources (helm-pacman-query-group-build-source "Query - group")
         :buffer "*helm-pacman-query-group*"))
@@ -219,6 +248,7 @@
 (defvar helm-pacman-aur-version 5)
 
 (defun helm-pacman-aur-rpc-uri (query)
+  "Build a uri for aurweb RPC Interface."
   (concat helm-pacman-aur-host
           helm-pacman-aur-rpc
           (format "?v=%d&" helm-pacman-aur-version)
@@ -253,6 +283,7 @@
       (helm-update))))
 
 (defun helm-pacman-aur-candidates (&optional source)
+  "Produce a list of AUR packages."
   (let ((src (or source (helm-get-current-source))))
     (unless (equal (cdr (assq 'pattern-cache src)) helm-pattern)
       (setcdr (assq 'pattern-cache src) helm-pattern)
@@ -282,6 +313,7 @@
              "\n"))
 
 (defun helm-pacman-aur-info (_ignore)
+  "Show package(s) infomation."
   (switch-to-buffer "*helm-pacman-aur-info*")
   (erase-buffer)
   (mapc (lambda (p) (insert (helm-pacman-aur-format-package p) "\n\n"))
@@ -306,6 +338,7 @@
                            (format "tar xz -C '%s'" dir)))
 
 (defun helm-pacman-aur-get (_ignore)
+  "Get package(s)' PKGBUILD."
   (dolist (v (helm-marked-candidates))
     (let ((dir (expand-file-name (read-directory-name "Download into: " "~/.local/source/")))
           (path (cdr (assq 'URLPath v))))
@@ -320,16 +353,19 @@
 (defvar helm-pacman-aur-actions
   (helm-make-actions
    "Show package(s)" 'helm-pacman-aur-info
-   "Get package(s) PKGBUILD" 'helm-pacman-aur-get))
+   "Get package(s) PKGBUILD" 'helm-pacman-aur-get)
+  "Actions for `helm-pacman-aur'.")
 
 (defvar helm-pacman-aur-keymap
   (let ((m (make-sparse-keymap)))
     (set-keymap-parent m helm-map)
     (dolist (v '(("C-c w" . helm-pacman-aur-run-get)))
       (define-key m (kbd (car v)) (cdr v)))
-    m))
+    m)
+  "Keymap for `helm-pacman-aur'.")
 
 (defun helm-pacman-aur-build-source (name &rest args)
+  "Build source for `helm-pacman-aur'."
   (helm-make-source name 'helm-pacman-aur-source
     :candidates 'helm-pacman-aur-candidates
     :action 'helm-pacman-aur-actions
@@ -338,6 +374,7 @@
 
 ;;;###autoload
 (defun helm-pacman-aur ()
+  "Helm for AUR."
   (interactive)
   (helm :sources (helm-pacman-aur-build-source "AUR")
         :buffer "*helm-pacman-aur*"))
@@ -346,7 +383,10 @@
 
 ;;;###autoload
 (defun helm-pacman ()
-  "Helm for Pacman."
+  "Helm for Pacman.
+
+It is a mixture of `helm-pacman-sync', `helm-pacman-sync-group',
+`helm-pacman-query', `helm-pacman-query-group' and `helm-pacman-aur'."
   (interactive)
   (helm :sources (list (helm-pacman-sync-build-source "Sync")
                        (helm-pacman-sync-group-build-source "Sync - group")
