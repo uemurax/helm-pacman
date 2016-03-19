@@ -4,7 +4,7 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-03-19 17:02:38 tuemura>
+;; Time-stamp: <2016-03-19 22:09:38 tuemura>
 ;;
 ;;; Code:
 
@@ -212,6 +212,110 @@
   (helm :sources (helm-pacman-query-group-build-source "Query - group")
         :buffer "*helm-pacman-query-group*"))
 
+;;;; AUR
+
+(defvar helm-pacman-aur-host "https://aur.archlinux.org")
+(defvar helm-pacman-aur-rpc "/rpc/")
+(defvar helm-pacman-aur-version 5)
+
+(defun helm-pacman-aur-rpc-uri (query)
+  (concat helm-pacman-aur-host
+          helm-pacman-aur-rpc
+          (format "?v=%d&" helm-pacman-aur-version)
+          (url-build-query-string query)))
+
+(defclass helm-pacman-aur-source (helm-source-in-buffer)
+  ((candidates-cache :initform t)
+   (pattern-cache :initform "")))
+
+(defun helm-pacman-aur-candidates-callback-error (source obj)
+  (message (cdr (assq 'error obj)))
+  (setcdr (assq 'candidates-cache source) nil))
+
+(defun helm-pacman-aur-candidates-callback-search (source obj)
+  (setcdr (assq 'candidates-cache source)
+          (mapcar (lambda (x) (cons (cdr (assq 'Name x)) x))
+                  (cdr (assq 'results obj)))))
+
+(defvar helm-pacman-aur-candidates-callback-count 0)
+
+(defun helm-pacman-aur-candidates-callback (status source count &rest _ignore)
+  (when (= count helm-pacman-aur-candidates-callback-count)
+    (goto-char (point-min))
+    (search-forward "\n\n")
+    (let* ((obj (json-read))
+           (type (cdr (assq 'type obj))))
+      (cond ((equal type "error")
+             (helm-pacman-aur-candidates-callback-error source obj))
+            ((equal type "search")
+             (helm-pacman-aur-candidates-callback-search source obj))
+            (t
+             (message "Wrong type: %S" type)))
+      (helm-update))))
+
+(defun helm-pacman-aur-candidates (&optional source)
+  (let ((src (or source (helm-get-current-source))))
+    (unless (equal (cdr (assq 'pattern-cache src)) helm-pattern)
+      (setcdr (assq 'pattern-cache src) helm-pattern)
+      (message "retrieving AUR packages...")
+      (setq helm-pacman-aur-candidates-callback-count
+            (1+ helm-pacman-aur-candidates-callback-count))
+      (url-retrieve (concat (helm-pacman-aur-rpc-uri
+                             `((type "search")))
+                            "&arg="
+                            (replace-regexp-in-string "\\s-+" "+" helm-pattern))
+                    'helm-pacman-aur-candidates-callback
+                    (list src
+                          helm-pacman-aur-candidates-callback-count)))
+    (cdr (assq 'candidates-cache src))))
+
+(defun helm-pacman-aur-format-package (pkg)
+  (mapconcat (lambda (v)
+               (format "%-20s : %s"
+                       (car v)
+                       (let ((x (cdr v)))
+                         (cond ((and (not (stringp x)) (sequencep x))
+                                (mapconcat (lambda (y) (format "%s" y))
+                                           x
+                                           (format "\n%-20s   " "")))
+                               (t x)))))
+             pkg
+             "\n"))
+
+(defun helm-pacman-aur-info (_ignore)
+  (switch-to-buffer "*helm-pacman-aur-info*")
+  (erase-buffer)
+  (mapc (lambda (p) (insert (helm-pacman-aur-format-package p) "\n\n"))
+        (with-current-buffer
+            (url-retrieve-synchronously (helm-pacman-aur-rpc-uri
+                                         `((type "info")
+                                           ,@(mapcar (lambda (x) (list "arg[]" (cdr (assq 'Name x))))
+                                                     (helm-marked-candidates)))))
+          (goto-char (point-min))
+          (search-forward "\n\n")
+          (let* ((obj (json-read))
+                 (type (cdr (assq 'type obj))))
+            (cond ((equal type "multiinfo")
+                   (cdr (assq 'results obj)))
+                  (t (message "Wrong type: %S" type)
+                     nil))))))
+
+(defvar helm-pacman-aur-actions
+  (helm-make-actions
+   "Show package(s)" 'helm-pacman-aur-info))
+
+(defun helm-pacman-aur-build-source (name &rest args)
+  (helm-make-source name 'helm-pacman-aur-source
+    :candidates 'helm-pacman-aur-candidates
+    :action 'helm-pacman-aur-actions
+    :delayed 0.2))
+
+;;;###autoload
+(defun helm-pacman-aur ()
+  (interactive)
+  (helm :sources (helm-pacman-aur-build-source "AUR")
+        :buffer "*helm-pacman-aur*"))
+
 ;;;; Put together
 
 ;;;###autoload
@@ -221,7 +325,8 @@
   (helm :sources (list (helm-pacman-sync-build-source "Sync")
                        (helm-pacman-sync-group-build-source "Sync - group")
                        (helm-pacman-query-build-source "Query")
-                       (helm-pacman-query-group-build-source "Query - group"))
+                       (helm-pacman-query-group-build-source "Query - group")
+                       (helm-pacman-aur-build-source "AUR"))
         :buffer "*helm-pacman*"))
 
 (provide 'helm-pacman)
