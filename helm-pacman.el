@@ -4,7 +4,7 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-03-19 23:32:10 tuemura>
+;; Time-stamp: <2016-04-06 03:53:59 tuemura>
 ;;
 ;;; Code:
 
@@ -369,8 +369,7 @@ If SUDO is non-nil, it executes the command `sudo pacman -OPERATION TARGETS...'.
   (helm-make-source name 'helm-pacman-aur-source
     :candidates 'helm-pacman-aur-candidates
     :action 'helm-pacman-aur-actions
-    :keymap helm-pacman-aur-keymap
-    :delayed 0.2))
+    :keymap helm-pacman-aur-keymap))
 
 ;;;###autoload
 (defun helm-pacman-aur ()
