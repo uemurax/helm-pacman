@@ -4,7 +4,6 @@
 ;;
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Time-stamp: <2016-04-06 03:53:59 tuemura>
 ;;
 ;;; Code:
 
@@ -254,50 +253,59 @@ If SUDO is non-nil, it executes the command `sudo pacman -OPERATION TARGETS...'.
           (format "?v=%d&" helm-pacman-aur-version)
           (url-build-query-string query)))
 
-(defclass helm-pacman-aur-source (helm-source-in-buffer)
-  ((candidates-cache :initform t)
-   (pattern-cache :initform "")
-   (count :initform 0)))
+(defclass helm-pacman-source-aur (helm-source-async)
+  ((candidates-process :initform #'helm-pacman-aur-candidates-process)))
 
-(defun helm-pacman-aur-candidates-callback-error (source obj)
-  (message (cdr (assq 'error obj)))
-  (setcdr (assq 'candidates-cache source) nil))
+(defun helm-pacman-aur-candidates-process ()
+  (let ((proc (start-process "helm-pacman-aur" nil "cat")))
+    (url-retrieve (concat (helm-pacman-aur-rpc-uri
+                             `((type "search")))
+                          "&arg="
+                          (replace-regexp-in-string "\\s-+" "+" helm-pattern))
+                  'helm-pacman-aur-candidates-callback
+                  (list proc))
+    proc))
 
-(defun helm-pacman-aur-candidates-callback-search (source obj)
-  (setcdr (assq 'candidates-cache source)
-          (mapcar (lambda (x) (cons (cdr (assq 'Name x)) x))
-                  (cdr (assq 'results obj)))))
+(defun helm-pacman-aur-candidates-callback-error (process obj))
 
-(defun helm-pacman-aur-candidates-callback (status source count &rest _ignore)
-  (when (= count (cdr (assq 'count source)))
+(defun helm-pacman-aur-candidates-callback-search (process obj)
+  (mapc (lambda (x)
+          (process-send-string process
+                               (concat (cdr (assq 'Name x))
+                                       "\n")))
+        (cdr (assq 'results obj))))
+
+(defun helm-pacman-aur-candidates-callback (status process &rest _ignore)
+  (when (process-live-p process)
     (goto-char (point-min))
     (search-forward "\n\n")
     (let* ((obj (json-read))
            (type (cdr (assq 'type obj))))
       (cond ((equal type "error")
-             (helm-pacman-aur-candidates-callback-error source obj))
+             (helm-pacman-aur-candidates-callback-error process obj))
             ((equal type "search")
-             (helm-pacman-aur-candidates-callback-search source obj))
+             (helm-pacman-aur-candidates-callback-search process obj))
             (t
              (message "Wrong type: %S" type)))
-      (helm-update))))
+      (process-send-eof process))))
 
-(defun helm-pacman-aur-candidates (&optional source)
-  "Produce a list of AUR packages."
-  (let ((src (or source (helm-get-current-source))))
-    (unless (equal (cdr (assq 'pattern-cache src)) helm-pattern)
-      (setcdr (assq 'pattern-cache src) helm-pattern)
-      (message "retrieving AUR packages...")
-      (setcdr (assq 'count src)
-              (1+ (cdr (assq 'count src))))
-      (url-retrieve (concat (helm-pacman-aur-rpc-uri
-                             `((type "search")))
-                            "&arg="
-                            (replace-regexp-in-string "\\s-+" "+" helm-pattern))
-                    'helm-pacman-aur-candidates-callback
-                    (list src
-                          (cdr (assq 'count src)))))
-    (cdr (assq 'candidates-cache src))))
+(defun helm-pacman-aur-get-info (pkgs callback &optional cbargs)
+  (when pkgs
+    (url-retrieve (helm-pacman-aur-rpc-uri
+                   `((type "info")
+                     ("arg[]" ,@pkgs)))
+                  (lambda (status callback &rest cbargs)
+                    (goto-char (point-min))
+                    (search-forward "\n\n")
+                    (let* ((obj (json-read))
+                           (type (cdr (assq 'type obj))))
+                      (apply callback
+                             (cond ((equal type "multiinfo")
+                                    (cdr (assq 'results obj)))
+                                   (t (message "Wrong type: %S" type)
+                                      nil))
+                             cbargs)))
+                  (apply #'list callback cbargs))))
 
 (defun helm-pacman-aur-format-package (pkg)
   (mapconcat (lambda (v)
@@ -314,22 +322,16 @@ If SUDO is non-nil, it executes the command `sudo pacman -OPERATION TARGETS...'.
 
 (defun helm-pacman-aur-info (_ignore)
   "Show package(s) infomation."
-  (switch-to-buffer "*helm-pacman-aur-info*")
-  (erase-buffer)
-  (mapc (lambda (p) (insert (helm-pacman-aur-format-package p) "\n\n"))
-        (with-current-buffer
-            (url-retrieve-synchronously (helm-pacman-aur-rpc-uri
-                                         `((type "info")
-                                           ("arg[]" ,@(mapcar (lambda (x) (cdr (assq 'Name x)))
-                                                              (helm-marked-candidates))))))
-          (goto-char (point-min))
-          (search-forward "\n\n")
-          (let* ((obj (json-read))
-                 (type (cdr (assq 'type obj))))
-            (cond ((equal type "multiinfo")
-                   (cdr (assq 'results obj)))
-                  (t (message "Wrong type: %S" type)
-                     nil))))))
+  (let ((buf (get-buffer-create "*helm-pacman-aur-info*")))
+    (switch-to-buffer "*helm-pacman-aur-info*")
+    (helm-pacman-aur-get-info (helm-marked-candidates)
+                              (lambda (obj buf)
+                                (with-current-buffer buf
+                                  (erase-buffer)
+                                  (mapc (lambda (p)
+                                          (insert (helm-pacman-aur-format-package p) "\n\n"))
+                                        obj)))
+                              (list buf))))
 
 (defun helm-pacman-aur-get-callback (status dir &rest _ignore)
   (goto-char (point-min))
@@ -339,15 +341,22 @@ If SUDO is non-nil, it executes the command `sudo pacman -OPERATION TARGETS...'.
 
 (defun helm-pacman-aur-get (_ignore)
   "Get package(s)' PKGBUILD."
-  (dolist (v (helm-marked-candidates))
-    (let ((dir (expand-file-name (read-directory-name "Download into: " "~/.local/source/")))
-          (path (cdr (assq 'URLPath v))))
+  (let ((pkgs (helm-marked-candidates)))
+    (let ((dir (expand-file-name (read-directory-name "Download into: " "~/.local/source/"))))
       (unless (file-exists-p dir)
         (make-directory dir t))
-      (url-retrieve (concat helm-pacman-aur-host
-                            path)
-                    'helm-pacman-aur-get-callback
-                    (list dir)))))
+      (helm-pacman-aur-get-info
+       pkgs
+       (lambda (obj dir)
+         (mapc `(lambda (v)
+                  (let ((path (cdr (assq 'URLPath v))))
+                    (message "Download %s" path)
+                    (url-retrieve (concat helm-pacman-aur-host
+                                          path)
+                                  'helm-pacman-aur-get-callback
+                                  (list ,dir))))
+               obj))
+       (list dir)))))
 (make-helm-action helm-pacman-aur-run-get helm-pacman-aur-get)
 
 (defvar helm-pacman-aur-actions
@@ -366,8 +375,7 @@ If SUDO is non-nil, it executes the command `sudo pacman -OPERATION TARGETS...'.
 
 (defun helm-pacman-aur-build-source (name &rest args)
   "Build source for `helm-pacman-aur'."
-  (helm-make-source name 'helm-pacman-aur-source
-    :candidates 'helm-pacman-aur-candidates
+  (helm-make-source name 'helm-pacman-source-aur
     :action 'helm-pacman-aur-actions
     :keymap helm-pacman-aur-keymap))
 
