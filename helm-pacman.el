@@ -1,9 +1,11 @@
-;;; helm-pacman.el - Helm interface for Pacman
+;;; helm-pacman.el --- Helm interface for Pacman
 ;;
 ;; Copyright (C) 2016 Taichi Uemura
 ;;
+;; Version: 0.1
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
+;; Package-Requires: ((helm "1"))
 ;;
 ;;; Code:
 
