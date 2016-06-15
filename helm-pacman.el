@@ -5,7 +5,7 @@
 ;; Version: 0.1
 ;; Author: Taichi Uemura <t.uemura00@gmail.com>
 ;; License: GPL3
-;; Package-Requires: ((helm "1"))
+;; Package-Requires: ((helm-core "1.9.7"))
 ;;
 ;;; Code:
 
