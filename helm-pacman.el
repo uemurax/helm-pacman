@@ -11,6 +11,10 @@
 
 (require 'helm)
 
+(defgroup helm-pacman ()
+  "Helm for pacman"
+  :group 'helm)
+
 (eval-when-compile
   (defmacro make-helm-action (action function &optional also-persistent)
     "Define ACTION which runs FUNCTION in `helm-pacman' session.
