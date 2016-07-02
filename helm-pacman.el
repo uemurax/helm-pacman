@@ -361,16 +361,30 @@ If SUDO is non-nil, it executes the command `sudo pacman -OPERATION TARGETS...'.
        (list dir)))))
 (make-helm-action helm-pacman-aur-run-get helm-pacman-aur-get)
 
+(defcustom helm-pacman-aur-helper-command "yaourt -S"
+  "Command to install AUR packages."
+  :group 'helm-pacman
+  :type 'string)
+
+(defun helm-pacman-aur-install (&rest _ignore)
+  "Run `yaourt -S TARGET...'"
+  (async-shell-command (concat helm-pacman-aur-helper-command
+                               " "
+                               (helm-pacman-make-arguments))))
+(make-helm-action helm-pacman-aur-run-install helm-pacman-aur-install)
+
 (defvar helm-pacman-aur-actions
   (helm-make-actions
    "Show package(s)" 'helm-pacman-aur-info
-   "Get package(s) PKGBUILD" 'helm-pacman-aur-get)
+   "Get package(s) PKGBUILD" 'helm-pacman-aur-get
+   "Install package(s)" 'helm-pacman-aur-install)
   "Actions for `helm-pacman-aur'.")
 
 (defvar helm-pacman-aur-keymap
   (let ((m (make-sparse-keymap)))
     (set-keymap-parent m helm-map)
-    (dolist (v '(("C-c w" . helm-pacman-aur-run-get)))
+    (dolist (v '(("C-c w" . helm-pacman-aur-run-get)
+                 ("C-c i" . helm-pacman-aur-run-install)))
       (define-key m (kbd (car v)) (cdr v)))
     m)
   "Keymap for `helm-pacman-aur'.")
